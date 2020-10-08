@@ -1,38 +1,36 @@
 ﻿using System.Collections.Generic;
 using BoatAttack;
+using BoatAttack.Benchmark;
 using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.UI;
 
 public class PerfomanceStats : MonoBehaviour
 {
-	private int _runNumber = 1;
-	public int runCount = 4;
-
-	public int runLength = 2000;
-
 	// Frame time stats
-	private List<PerfBasic> _stats;
-	private PerfBasic Stats => _stats[_runNumber - 1];
-    private List<float> samples = new List<float>();
+	private PerfBasic Stats;
+
+	private List<float> samples = new List<float>();// in microseconds
     private int totalSamples = 250;
-    private int curFrame = 0;
 
     // UI display
     public Text frametimeDisplay;
     private string debugInfo;
 
-    private void Start()
+    public void StartRun(string benchmarkName, int runLength)
     {
-	    _stats = new List<PerfBasic>();
-	    _stats.Add(new PerfBasic(runLength));
-	    CreateTextGUI();
+	    Stats = new PerfBasic(benchmarkName, runLength) {RunIndex = Benchmark.currentRunNumber};
+	    if(frametimeDisplay == null)
+			CreateTextGui();
     }
 
-    private void Update () {
-        frametimeDisplay.text = "";
+    private void Update ()
+    {
+	    if (!frametimeDisplay) return;
+
+		frametimeDisplay.text = "";
         // sample frametime
-        samples.Insert(0, Time.deltaTime); // add sample at the start
+        samples.Insert(0, Time.deltaTime * 1000f); // add sample at the start
 		if(samples.Count >= totalSamples)
 		{
             samples.RemoveAt(totalSamples - 1);
@@ -41,91 +39,85 @@ public class PerfomanceStats : MonoBehaviour
 
         var totalMem = Profiler.GetTotalAllocatedMemoryLong();
         var gpuMem = Profiler.GetAllocatedMemoryForGraphicsDriver();
-        
-        DrawText(((float)totalMem / 1000000).ToString("#0.00"), ((float)gpuMem / 1000000).ToString("#0.00"));
-        
-        
-        curFrame++;
-        Stats.RunTime += Time.unscaledDeltaTime;
 
-        if (curFrame > runLength)
-	        ResetRun();
+        DrawText(((float)totalMem / 1000000).ToString("#0.00"), ((float)gpuMem / 1000000).ToString("#0.00"));
+
+        Stats.RunTime += Time.unscaledDeltaTime;
     }
 
     private void DrawText(string memory, string gpuMemory)
 	{
 		var i = Stats.info;
-		debugInfo = $"Unity:<b>{i.UnityVersion}</b>   " +
-		            $"URP:<b>{i.UrpVersion}</b>   " +
-		            $"Build:<b>{i.BoatAttackVersion}</b>   " +
-		            $"Scene:<b>{i.Scene}</b>   " +
-		            $"Quality:<b>{i.Quality}</b>\n" + //////////////////////////////////////////////////
-		            $"DeviceInfo:<b>{i.Platform}</b>   " +
-		            $"<b>{i.API}</b>   " +
-		            $"<b>{i.Os.Replace(" ", "")}</b>\n" + ////////////////////////////
-		            $"CPU:<b>{i.CPU}</b>   " +
-		            $"GPU:<b>{i.GPU}</b>   " +
-		            $"Resolution:<b>{i.Resolution}</b>\n" + ////////////////////////////////////////////
-		            $"CurrentFrame:<b>{curFrame}</b>   " +
-		            $"Mem:<b>{memory}mb</b>   " +
-		            $"GPUMem:<b>{gpuMemory}mb</b>\n" + /////////////////////////////////////////////////
-		            $"AvgFrametime:<b>{Stats.AvgMs:#0.00}ms</b>   " +
-		            $"MinFrametime:<b>{Stats.MinMs*1000:#0.00}ms</b>(frame <b>{Stats.MinMSFrame}</b>)   " +
-		            $"MaxFrametime:<b>{Stats.MaxMs*1000:#0.00}ms</b>(frame <b>{Stats.MaxMSFrame}</b>)";
-		frametimeDisplay.text = $"<b><size=50>{Application.productName} Benchmark</size></b>\n{debugInfo}";
+		debugInfo = $"<b>Unity:</b>{i.UnityVersion}   " +
+		            $"<b>URP:</b>{i.UrpVersion}   " +
+		            $"<b>Build:</b>{i.BoatAttackVersion}   " +
+		            $"<b>Scene:</b>{i.Scene}   " +
+		            $"<b>Quality:</b>{i.Quality}\n" +
+		            //////////////////////////////////////////////////
+		            $"<b>DeviceInfo:</b>{i.Platform}   " +
+		            $"{i.API}   " +
+		            $"{i.Os.Replace(" ", "")}\n" +
+		            //////////////////////////////////////////////////
+		            $"<b>CPU:</b>{i.CPU}   " +
+		            $"<b>GPU:</b>{i.GPU}   " +
+		            $"<b>Resolution:</b>{i.Resolution}\n" +
+		            //////////////////////////////////////////////////
+		            $"<b>CurrentFrame:</b>{Benchmark.currentRunFrames}   " +
+		            $"<b>Mem:</b>{memory}mb   " +
+		            $"<b>GPUMem:</b>{gpuMemory}mb\n" +
+		            //////////////////////////////////////////////////
+		            $"<b>AvgFrametime:</b>{Stats.AvgMs:#0.00}ms   " +
+		            $"<b>MinFrametime:</b>{Stats.MinMs:#0.00}ms(frame {Stats.MinMSFrame})   " +
+		            $"<b>MaxFrametime:</b>{Stats.MaxMs:#0.00}ms(frame {Stats.MaxMSFrame})";
+		frametimeDisplay.text = $"<size=50>{Application.productName} Benchmark - {i.BenchmarkName}</size>\n{debugInfo}";
 	}
 
-	private void ResetRun()
+	public PerfBasic EndRun()
 	{
-		Debug.Log($"<b>Run {_runNumber}: TotalRuntime:{Stats.RunTime:#0.00}s</b>\n{debugInfo}");
+		var runNumber = Stats.RunIndex == -1 ? "Warmup" : (Stats.RunIndex + 1).ToString();
+		Debug.Log($"<b>{Stats.info.BenchmarkName} Run {runNumber}: TotalRuntime:{Stats.RunTime:#0.00}s</b>\n{debugInfo}");
 		Stats.RawSamples = samples.ToArray();
 		samples.Clear();
-		
-		curFrame = 0;
-		_stats.Add(new PerfBasic(runLength));
-		if (_runNumber < runCount)
-		{
-			_runNumber++;
-		}
-		else
-		{
-			Benchmark.EndBenchmark();
-		}
+		frametimeDisplay.text = "<size=50>Benchmark Ended</size>";
+		return Stats.RunIndex >= 0 ? Stats : null;
 	}
 
 	private void UpdateFrametime()
 	{
 		Stats.AvgMs = 0f;
         var sampleDivision = 1f / samples.Count;
-        
+
         foreach (var t in samples)
         {
 	        Stats.AvgMs += t * sampleDivision;
         }
-        
+
         if (Stats.MinMs > samples[0])
         {
 	        Stats.MinMs = samples[0];
-	        Stats.MinMSFrame = curFrame;
+	        Stats.MinMSFrame = Benchmark.currentRunFrames;
         }
 
-        if (curFrame > 20 && Stats.MaxMs < samples[0])
+        if (Benchmark.currentRunFrames > 20 && Stats.MaxMs < samples[0])
         {
 	        Stats.MaxMs = samples[0];
-	        Stats.MaxMSFrame = curFrame;
+	        Stats.MaxMSFrame = Benchmark.currentRunFrames;
         }
+	}
 
-        Stats.AvgMs *= 1000;
-    }
-
-	private void CreateTextGUI()
+	private void CreateTextGui()
 	{
-		var textGo = new GameObject("perfText", new []{typeof(Text)});
+		var textGo = new GameObject("perfText", typeof(Text));
 		textGo.transform.SetParent(AppSettings.ConsoleCanvas.transform, true);
+
 		frametimeDisplay = textGo.GetComponent<Text>();
+		frametimeDisplay.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+		frametimeDisplay.fontSize = 20;
+		frametimeDisplay.lineSpacing = 1.2f;
+		frametimeDisplay.raycastTarget = false;
+
 		var rectTransform = frametimeDisplay.rectTransform;
 		rectTransform.anchorMin = rectTransform.sizeDelta = rectTransform.anchoredPosition = Vector2.zero;
 		rectTransform.anchorMax = Vector2.one;
-		frametimeDisplay.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
 	}
 }

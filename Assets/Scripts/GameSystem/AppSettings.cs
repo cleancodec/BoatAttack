@@ -79,6 +79,11 @@ namespace BoatAttack
 
         private void Start()
         {
+            //KillDebug();
+        }
+
+        void KillDebug()
+        {
             var obj = GameObject.Find("[Debug Updater]"); // TODO hack to solve input class issues
             if(obj != null)
                 Destroy(obj);
@@ -236,6 +241,12 @@ namespace BoatAttack
                 assetLoading = assetRef.LoadAssetAsync<T>();
             }
             yield return assetLoading;
+        }
+
+        public static void ExitGame(string s)
+        {
+            Debug.LogError(s);
+            ExitGame();
         }
 
         public static void ExitGame()
