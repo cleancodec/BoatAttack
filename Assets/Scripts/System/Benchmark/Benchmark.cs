@@ -7,6 +7,7 @@ using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -47,6 +48,11 @@ namespace BoatAttack.Benchmark
             LoadBenchmark(settings.benchmarks[benchIndex]);
         }
 
+        private void OnDestroy()
+        {
+            RenderPipelineManager.endFrameRendering -= EndFrameRendering;
+        }
+
         private void LoadBenchmark(BenchmarkSettings setting)
         {
             _perfData.Add(benchIndex, new List<PerfBasic>());
@@ -70,6 +76,13 @@ namespace BoatAttack.Benchmark
                     AppSettings.ExitGame("Benchmark Not Setup");
                     break;
             }
+            
+            runFrames = _settings.runLength;
+            runNumber = _settings.runs;
+            
+            _stats.enabled = _settings.stats;
+            if(_settings.stats)
+                _stats.StartRun(_settings.benchmarkName, _settings.runLength);
 
             BeginRun();
             RenderPipelineManager.endFrameRendering += EndFrameRendering;
@@ -78,37 +91,23 @@ namespace BoatAttack.Benchmark
         private void BeginRun()
         {
             currentRunFrames = 0;
-            runFrames = _settings.runLength;
-
-            _stats.enabled = _settings.stats;
-            if(_settings.stats)
-                _stats.StartRun(_settings.benchmarkName, _settings.runLength);
         }
 
         private void EndFrameRendering(ScriptableRenderContext context, Camera[] cameras)
         {
             currentRunFrames++;
-            if (currentRunFrames > _settings.runLength)
-            {
-                if (_settings.stats)
-                {
-                    var stats = _stats.EndRun();
-                    if (stats != null)
-                    {
-                        _perfData[benchIndex].Add(stats);
-                    }
-                }
+            if (currentRunFrames <= _settings.runLength) return;
+            _stats.EndRun();
 
-                currentRunNumber++;
-                if (currentRunNumber < _settings.runs)
-                {
-                    BeginRun();
-                }
-                else
-                {
-                    RenderPipelineManager.endFrameRendering -= EndFrameRendering;
-                    EndBenchmark();
-                }
+            currentRunNumber++;
+            if (currentRunNumber < _settings.runs)
+            {
+                BeginRun();
+            }
+            else
+            {
+                RenderPipelineManager.endFrameRendering -= EndFrameRendering;
+                EndBenchmark();
             }
         }
 
@@ -140,6 +139,15 @@ namespace BoatAttack.Benchmark
 
         private void SaveBenchmarkStats()
         {
+            if (_settings.stats)
+            {
+                var stats = _stats.EndBench();
+                if (stats != null)
+                {
+                    _perfData[benchIndex].Add(stats);
+                }
+            }
+            
             var path = GetResultPath() + $"/{_perfData[benchIndex][0].info.BenchmarkName}.txt";
             var data = new string[_perfData[benchIndex].Count];
 
@@ -242,13 +250,35 @@ namespace BoatAttack.Benchmark
         public float MinMSFrame;
         public float MaxMs = Single.NegativeInfinity;
         public float MaxMSFrame;
-        public float[] RawSamples;
+        public FrameTimes[] RunData;
 
         public PerfBasic(string benchmarkName, int frames)
         {
             Frames = frames;
             info = new TestInfo(benchmarkName);
+            RunData = new FrameTimes[Benchmark.runNumber];
         }
+
+        public void Run(int runIndex, float[] frames)
+        {
+            RunData[runIndex] = new FrameTimes(frames);
+        }
+
+        public float Average
+        {
+            get => AvgMs;
+            set => AvgMs = value;
+        }
+        public void SetMin(float ms, int frame) { MinMs = ms; MinMSFrame = frame; }
+        public void SetMax(float ms, int frame) { MaxMs = ms; MaxMSFrame = frame; }
+    }
+
+    [Serializable]
+    public class FrameTimes
+    {
+        public float[] rawSamples;
+
+        public FrameTimes(float[] times) { rawSamples = times; }
     }
 
     [Serializable]
@@ -282,39 +312,5 @@ namespace BoatAttack.Benchmark
             Quality =  Utility.RemoveWhitespace(QualitySettings.names[QualitySettings.GetQualityLevel()]);
             Resolution = $"{Display.main.renderingWidth}x{Display.main.renderingHeight}";
         }
-    }
-
-    [Serializable]
-    public enum BenchmarkType
-    {
-        Scene,
-        Shader
-    }
-
-    [Serializable]
-    public enum BenchmarkCameraType
-    {
-        Static,
-        FlyThrough
-    }
-
-    [Serializable]
-    public enum FinishAction
-    {
-        Exit,
-        ShowStats,
-        Nothing
-    }
-
-    [Serializable]
-    public class BenchmarkSettings
-    {
-        public string benchmarkName;
-        public string scene = "benchmark_island-flythrough";
-        public BenchmarkType type;
-        public int runs = 4;
-        public int runLength = 1000;
-        public bool warmup;
-        public bool stats = false;
     }
 }

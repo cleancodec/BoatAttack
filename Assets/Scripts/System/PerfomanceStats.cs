@@ -72,14 +72,19 @@ public class PerfomanceStats : MonoBehaviour
 		frametimeDisplay.text = $"<size=50>{Application.productName} Benchmark - {i.BenchmarkName}</size>\n{debugInfo}";
 	}
 
-	public PerfBasic EndRun()
+	public void EndRun()
 	{
-		var runNumber = Stats.RunIndex == -1 ? "Warmup" : (Stats.RunIndex + 1).ToString();
+		var runNumber = Benchmark.currentRunNumber == -1 ? "Warmup" : (Benchmark.currentRunNumber + 1).ToString();
 		Debug.Log($"<b>{Stats.info.BenchmarkName} Run {runNumber}: TotalRuntime:{Stats.RunTime:#0.00}s</b>\n{debugInfo}");
-		Stats.RawSamples = samples.ToArray();
+		if(Benchmark.currentRunNumber >= 0)
+			Stats.Run(Benchmark.currentRunNumber,samples.ToArray());
 		samples.Clear();
+	}
+
+	public PerfBasic EndBench()
+	{
 		frametimeDisplay.text = "<size=50>Benchmark Ended</size>";
-		return Stats.RunIndex >= 0 ? Stats : null;
+		return Stats != null ? Stats : null;
 	}
 
 	private void UpdateFrametime()
@@ -91,6 +96,8 @@ public class PerfomanceStats : MonoBehaviour
         {
 	        Stats.AvgMs += t * sampleDivision;
         }
+
+        if (Benchmark.runNumber < 0) return;
 
         if (Stats.MinMs > samples[0])
         {

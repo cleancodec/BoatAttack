@@ -24,6 +24,7 @@ public class BenchmarkWindow : EditorWindow
     public int currentToolbar;
     public const int ToolbarWidth = 150;
     private List<PerfResults> PerfResults = new List<PerfResults>();
+    private string[] resultFiles;
     private int currentResult;
 
     // TempUI vars
@@ -37,10 +38,10 @@ public class BenchmarkWindow : EditorWindow
         var toolbarRect = EditorGUILayout.GetControlRect();
         toolbarRect.position += new Vector2((toolbarRect.width - ToolbarWidth) * 0.5f, 0f);
         toolbarRect.width = ToolbarWidth;
-
+        
         currentToolbar = GUI.Toolbar(toolbarRect, currentToolbar,
             Styles.toolbarOptions);
-
+        
         switch (currentToolbar)
         {
             case 0:
@@ -61,22 +62,29 @@ public class BenchmarkWindow : EditorWindow
     {
         if (PerfResults == null || PerfResults.Count == 0)
         {
-            PerfResults = Benchmark.LoadAllBenchmarkStats();
+            UpdateFiles();
         }
-
-        string[] files = new string[PerfResults.Count];
-        for (var index = 0; index < PerfResults.Count; index++)
+        
+        if (PerfResults != null && PerfResults.Count > 0)
         {
-            files[index] = PerfResults[index].fileName;
+            EditorGUILayout.BeginHorizontal();
+            currentResult = EditorGUILayout.Popup(new GUIContent("File"), currentResult, resultFiles);
+            if (GUILayout.Button("reload", GUILayout.Width(100)))
+            {
+                UpdateFiles();
+            }
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(4);
+
+            DrawPerfInfo(PerfResults[currentResult].perfStats[0].info);
+
+            DrawPerf(PerfResults[currentResult].perfStats[0], 0);
         }
-
-        currentResult = EditorGUILayout.Popup(new GUIContent("File"), currentResult, files);
-
-        EditorGUILayout.Space(4);
-
-        DrawPerfInfo(PerfResults[currentResult].perfStats[0].info);
-
-        DrawPerf(PerfResults[currentResult].perfStats[0]);
+        else
+        {
+            GUILayout.Label("No Stats found, please run a benchmark.");
+        }
     }
 
     private void DrawPerfInfo(TestInfo info)
@@ -109,17 +117,20 @@ public class BenchmarkWindow : EditorWindow
         EditorGUILayout.EndVertical();
     }
 
-    private void DrawPerf(PerfBasic data)
+    private void DrawPerf(PerfBasic data, int run)
     {
         EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
         resultDataHeader = EditorGUILayout.BeginFoldoutHeaderGroup(resultDataHeader, "Data");
         if (resultDataHeader)
         {
+            EditorGUILayout.Space(4);
+            
             EditorGUILayout.BeginHorizontal();
             {
                 var lw = EditorGUIUtility.labelWidth;
                 EditorGUIUtility.labelWidth = 50f;
+                EditorGUILayout.LabelField("Run:", $"{run}", EditorStyles.boldLabel);
                 EditorGUILayout.LabelField("Average:", $"{data.AvgMs:F2}ms", EditorStyles.boldLabel);
                 EditorGUILayout.LabelField("Min:", $"{data.MinMs:F2}ms at frame {data.MinMSFrame}", EditorStyles.boldLabel);
                 EditorGUILayout.LabelField("Max:", $"{data.MaxMs:F2}ms at frame {data.MaxMSFrame}", EditorStyles.boldLabel);
@@ -128,25 +139,80 @@ public class BenchmarkWindow : EditorWindow
             EditorGUILayout.EndHorizontal();
 
             var graphRect = EditorGUILayout.GetControlRect(false, 500f);
-            DrawGraph(graphRect, data.RawSamples);
+            DrawGraph(graphRect, data.RunData, 0, data.AvgMs * 2f);
         }
         EditorGUILayout.EndFoldoutHeaderGroup();
 
         EditorGUILayout.EndVertical();
     }
 
-    private void DrawGraph(Rect rect, float[] values)
+    private void DrawGraph(Rect rect, FrameTimes[] values, float minMS, float maxMS)
     {
         var padding = 20f;
         rect.max -= Vector2.one * padding;
+        rect.xMax -= 40f;
         rect.min += Vector2.one * padding;
 
+        
+        //draw value markers
         GUI.DrawTexture(rect, Texture2D.grayTexture, ScaleMode.StretchToFill);
-        for (var index = 0; index < values.Length; index++)
+        
+        DrawGraphMarkers(rect, minMS, maxMS, 5);
+
+        var H = 1f;
+        foreach (var frames in values)
         {
-            var val = values[index];
-            var pos = Mathf.InverseLerp(rect.min.x, rect.max.x, (float)index / values.Length);
-            GUI.Box(new Rect(new Vector2(pos, rect.max.y), Vector2.one * 5f), Texture2D.whiteTexture);
+            var graphPoints = new Vector3[frames.rawSamples.Length];
+            for (var j = 0; j < frames.rawSamples.Length; j++)
+            {
+                var valA = rect.yMax - rect.height * GetGraphLerpValue(frames.rawSamples[j], minMS, maxMS);
+
+                var xLerp = new Vector2(j, j + 1) / frames.rawSamples.Length;
+                var xA = Mathf.Lerp(rect.xMin, rect.xMax, xLerp.x);
+                var posA = new Vector2(xA, valA);
+                graphPoints[j] = posA;
+            }
+            var c = Color.HSVToRGB(H, 0.75f, 1f);
+            c.a = 0.75f;
+            Handles.color = c;
+            Handles.DrawAAPolyLine(graphPoints);
+
+            H -= 0.1f;
+        }
+    }
+
+    private void DrawGraphMarkers(Rect rect, float min, float max, int count)
+    {
+        count--;
+        for (int i = 0; i <= count; i++)
+        {
+            var y = Mathf.Lerp(rect.yMax, rect.yMin, (float)i / count);
+            Handles.color = new Color(0f, 0f, 0f, 0.25f);
+            Handles.DrawDottedLine(new Vector2(rect.xMin, y), new Vector2(rect.xMax, y), 4);
+            y -= EditorGUIUtility.singleLineHeight * 0.5f;
+            var val = Mathf.Lerp(min, max, (float) i / count);
+            GUI.Label(new Rect(new Vector2(rect.xMax, y), new Vector2(80, EditorGUIUtility.singleLineHeight)), $"{val:F1}ms");
+        }
+    }
+
+    private float GetGraphLerpValue(float ms)
+    {
+        return GetGraphLerpValue(ms, 0f, 33.33f);
+    }
+
+    private float GetGraphLerpValue(float ms, float msMin, float msMax)
+    {
+        var msA = ms;
+        return Mathf.InverseLerp(msMin, msMax, msA);
+    }
+
+    private void UpdateFiles()
+    {
+        PerfResults = Benchmark.LoadAllBenchmarkStats();
+        resultFiles = new string[PerfResults.Count];
+        for (var index = 0; index < PerfResults.Count; index++)
+        {
+            resultFiles[index] = PerfResults[index].fileName;
         }
     }
 }
