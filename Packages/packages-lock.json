@@ -101,6 +101,13 @@
       },
       "url": "https://packages.unity.com"
     },
+    "com.unity.quicksearch": {
+      "version": "1.5.4",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://packages.unity.com"
+    },
     "com.unity.render-pipelines.core": {
       "version": "9.0.0-preview.38",
       "depth": 1,
