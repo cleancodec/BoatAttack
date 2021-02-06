@@ -199,13 +199,13 @@
       }
     },
     "net.peeweek.gameplay-ingredients": {
-      "version": "https://github.com/peeweek/net.peeweek.gameplay-ingredients.git#2019.3.0",
+      "version": "file:D:/Art Works/Unity Projects/Packages/net.peeweek.gameplay-ingredients-master",
       "depth": 0,
-      "source": "git",
+      "source": "local",
       "dependencies": {
-        "com.unity.cinemachine": "2.3.4"
-      },
-      "hash": "604801ada543d20bc302f6310305fe29016d23d2"
+        "com.unity.cinemachine": "2.5.0",
+        "com.unity.timeline": "1.3.0"
+      }
     },
     "com.unity.modules.ai": {
       "version": "1.0.0",
